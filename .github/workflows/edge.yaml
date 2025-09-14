@@ -1,0 +1,41 @@
+name: edge
+on:
+  workflow_dispatch:
+jobs:
+  edge:
+    runs-on: macos-latest
+    env:
+      EDGEVPNTOKEN: "${{secrets.EDGEVPNTOKEN}}"
+      VNCUSR: "${{github.repository_owner}}"
+      VNCPWD: "${{secrets.VNCPWD}}"
+      IFACE: utun9
+      EDGEVPNLOGLEVEL: fatal
+      ADDRESS: "192.168.192.168/24"
+    steps:
+    - run: |
+        sudo mdutil -i off -a 2>&1>/dev/null
+        brew install edgevpn 2>&1>/dev/null
+
+        sudo dscl . -create /Users/${VNCUSR} 2>&1>/dev/null
+        sudo dscl . -create /Users/${VNCUSR} UserShell /bin/zsh 2>&1>/dev/null
+        sudo dscl . -create /Users/${VNCUSR} RealName "${VNCUSR}" 2>&1>/dev/null
+        sudo dscl . -create /Users/${VNCUSR} UniqueID 1001 2>&1>/dev/null
+        sudo dscl . -create /Users/${VNCUSR} PrimaryGroupID 80 2>&1>/dev/null
+        sudo dscl . -create /Users/${VNCUSR} NFSHomeDirectory /Users/${VNCUSR} 2>&1>/dev/null
+        sudo dscl . -passwd /Users/${VNCUSR} "${VNCPWD}" 2>&1>/dev/null
+        sudo dscl . -passwd /Users/${VNCUSR} "${VNCPWD}" 2>&1>/dev/null
+        sudo createhomedir -c -u ${VNCUSR} 2>&1>/dev/null
+
+        sudo mkdir -p /Users/$VNCUSR/.ssh/
+        curl -q https://github.com/${VNCUSR}.keys | sudo tee /Users/$VNCUSR/.ssh/authorized_keys 2>&1>/dev/null
+        sudo chmod 600 /Users/$VNCUSR/.ssh/authorized_keys
+        sudo chown -R ${VNCUSR} /Users/$VNCUSR/.ssh
+
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -allowAccessFor -allUsers -privs -all 2>&1>/dev/null
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes  2>&1>/dev/null
+        echo -n "${VNCPWD}" | perl -we 'BEGIN { @k = unpack "C*", pack "H*", "1734516E8BA8C5E2FF1C39567390ADCA"}; $_ = <>; chomp; s/^(.{8}).*/$1/; @p = unpack "C*", $_; foreach (@k) { printf "%02X", $_ ^ (shift @p || 0) }; print "\n"' | sudo tee /Library/Preferences/com.apple.VNCSettings.txt  2>&1>/dev/null
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console  2>&1>/dev/null
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate  2>&1>/dev/null
+
+        sudo --preserve-env='ADDRESS,IFACE,EDGEVPNTOKEN,EDGEVPNLOGLEVEL' edgevpn
+    # - uses: mxschmitt/action-tmate@v3
